@@ -65,7 +65,7 @@ opcode they answer.
 | Bytes | Meaning |
 | --- | --- |
 | `B0` | Read the swing's Bluetooth ID; reply `B0 <status> <16-byte id>` |
-| `B2 00` | Open a new pairing |
+| `B2 00` | Open a new pairing; the swing replies `B1 01` asking for a pairing ID |
 | `B1 01 <16-byte uuid>` | Register a pairing ID; result arrives as `B3 xx 00` |
 | `B2 01 <16-byte uuid>` | Handshake with a stored pairing ID after connecting; result `B3 xx 00` |
 | `43 01 <0/1>` | Power |

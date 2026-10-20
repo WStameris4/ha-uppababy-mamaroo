@@ -149,8 +149,11 @@ class MamarooSession:
 async def async_pair(hass: HomeAssistant) -> tuple[UUID | None, UUID]:
     """Register a new pairing ID; the swing must be in pairing mode.
 
-    Mirrors the app: read the Bluetooth ID, open a pairing, write a fresh
-    random pairing ID, then wait for the handshake result.
+    Observed exchange (2026-10-20):
+        -> b0                 <- b0 00 <16-byte bluetooth id>
+                              <- b2 01 ...   (unprompted)
+        -> b2 00              <- b1 01 ...   (the swing asks for a pairing ID)
+        -> b1 01 <uuid>       <- b3 xx 00    (pairing accepted)
     """
     device = latest_swing(hass)
     if device is None:
@@ -165,12 +168,13 @@ async def async_pair(hass: HomeAssistant) -> tuple[UUID | None, UUID]:
             await session.request(protocol.get_bluetooth_id())
         )
         _LOGGER.debug("bluetooth id reply %s", reply)
-        opened = await session.request(protocol.begin_pairing())
-        _LOGGER.debug("begin pairing reply %s", opened.hex())
+        prompt = await session.request(
+            protocol.begin_pairing(), protocol.OP_SET_PAIRING_ID
+        )
+        _LOGGER.debug("pairing id prompt %s", prompt.hex())
         pairing_id = uuid4()
         result = session.expect(protocol.OP_HANDSHAKE_RESULT)
-        ack = await session.request(protocol.set_pairing_id(pairing_id))
-        _LOGGER.debug("pairing id reply %s", ack.hex())
+        await session.write(protocol.set_pairing_id(pairing_id))
         try:
             outcome = await asyncio.wait_for(result, PAIRING_TIMEOUT)
         except TimeoutError as err:
