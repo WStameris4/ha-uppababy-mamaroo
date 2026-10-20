@@ -12,6 +12,7 @@ from bleak import BleakClient
 from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
 from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
+from bluetooth_data_tools import monotonic_time_coarse
 
 from homeassistant.components import bluetooth
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
@@ -21,6 +22,7 @@ from .const import CHAR_UUID, SERVICE_UUID
 
 _LOGGER = logging.getLogger(__name__)
 
+FRESH_SECONDS = 60
 REPLY_TIMEOUT = 3.0
 PAIRING_TIMEOUT = 30.0
 RECONNECT_DELAYS = (2, 5, 10, 30, 60)
@@ -31,19 +33,21 @@ class MamarooError(Exception):
 
 
 def latest_swing(hass: HomeAssistant) -> BLEDevice | None:
-    """Return the most recently heard swing.
+    """Return the swing heard loudest in the last minute.
 
     The swing advertises from rotating random addresses, so it is found by its
-    service UUID rather than by a stored MAC.
+    service UUID rather than by a stored MAC. Picking by signal rather than by
+    recency keeps a neighbouring swing at the edge of range from winning.
     """
+    now = monotonic_time_coarse()
     infos = [
         info
         for info in bluetooth.async_discovered_service_info(hass, connectable=True)
-        if SERVICE_UUID in info.service_uuids
+        if SERVICE_UUID in info.service_uuids and now - info.time < FRESH_SECONDS
     ]
     if not infos:
         return None
-    return max(infos, key=lambda info: info.time).device
+    return max(infos, key=lambda info: info.rssi).device
 
 
 class MamarooSession:
@@ -70,6 +74,7 @@ class MamarooSession:
         get_device: Callable[[], BLEDevice | None],
         disconnected: Callable[[BleakClient], None] | None = None,
         on_status: Callable[[protocol.SwingState], None] | None = None,
+        max_attempts: int = 4,
     ) -> MamarooSession:
         """Connect and subscribe to notifications."""
         client = await establish_connection(
@@ -78,6 +83,7 @@ class MamarooSession:
             device.name or "mamaRoo",
             disconnected_callback=disconnected,
             ble_device_callback=lambda: get_device() or device,
+            max_attempts=max_attempts,
         )
         try:
             session = cls(client, on_status)
@@ -149,7 +155,11 @@ async def async_pair(hass: HomeAssistant) -> tuple[UUID | None, UUID]:
     device = latest_swing(hass)
     if device is None:
         raise MamarooError("no swing in range")
-    session = await MamarooSession.open(device, lambda: latest_swing(hass))
+    _LOGGER.debug("pairing with %s", device.address)
+    # Few attempts: the swing only stays in pairing mode briefly.
+    session = await MamarooSession.open(
+        device, lambda: latest_swing(hass), max_attempts=2
+    )
     try:
         reply = protocol.parse_bluetooth_id(
             await session.request(protocol.get_bluetooth_id())
