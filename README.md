@@ -45,6 +45,7 @@ app's pairing, so the UPPAbaby Connect app may need to be paired again.
 | Fan (the swing) | Motion on/off, speed 1–5 as a percentage, motion pattern (Cruise, Bounce, Sway, Rock, Wave) as a preset |
 | Power switch | Turns the swing on or off |
 | Sound switch | Turns the built-in sound on or off |
+| Motion select | Cruise, Bounce, Sway, Rock, Wave; choosing one starts it, like tapping its icon on the panel |
 | Sound track select | Sound 1–4, as numbered on the panel |
 | Volume number | 1–4, like the panel's volume lights |
 | Shutdown timer number | Minutes until the swing stops; shows the time left while set, 0 when off; setting 0 cancels |

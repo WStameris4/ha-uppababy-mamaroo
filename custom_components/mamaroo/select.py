@@ -1,4 +1,4 @@
-"""Built-in sound selection."""
+"""Motion pattern and built-in sound selection."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import MamarooConfigEntry, protocol
 from .entity import MamarooEntity
+from .fan import MOTIONS
 
 # Numbered as on the panel; the swing reports 0 until one is chosen.
 SOUNDS = ["sound_1", "sound_2", "sound_3", "sound_4"]
@@ -18,8 +19,32 @@ async def async_setup_entry(
     entry: MamarooConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add the sound select."""
-    async_add_entities([MamarooSound(entry)])
+    """Add the motion and sound selects."""
+    async_add_entities([MamarooMotionPattern(entry), MamarooSound(entry)])
+
+
+class MamarooMotionPattern(MamarooEntity, SelectEntity):
+    """Which motion pattern runs; choosing one starts it, like the panel."""
+
+    _attr_options = MOTIONS
+
+    def __init__(self, entry: MamarooConfigEntry) -> None:
+        super().__init__(entry, "motion_pattern")
+
+    @property
+    def current_option(self) -> str | None:
+        """The current pattern, also shown while stopped."""
+        index = self.state_data.motion - 1
+        return MOTIONS[index] if 0 <= index < len(MOTIONS) else None
+
+    async def async_select_option(self, option: str) -> None:
+        """Switch to a pattern and start moving."""
+        state = self.state_data
+        commands = [] if state.power else [protocol.set_flag(protocol.FIELD_POWER, True)]
+        commands.append(protocol.set_field(protocol.FIELD_MOTION, MOTIONS.index(option) + 1))
+        if not state.motion_enabled:
+            commands.append(protocol.set_flag(protocol.FIELD_MOTION_ENABLED, True))
+        await self._send(*commands)
 
 
 class MamarooSound(MamarooEntity, SelectEntity):

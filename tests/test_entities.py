@@ -94,3 +94,26 @@ async def test_timer_shows_minutes_left_and_sets_minutes(
 async def test_timer_off_reads_zero(hass: HomeAssistant, send: AsyncMock) -> None:
     # Idle, the swing reports a 4 h countdown that is not an active timer.
     assert hass.states.get("number.mamaroo_shutdown_timer").state == "0"
+
+
+@pytest.mark.state(IDLE)
+async def test_choosing_a_motion_starts_it(hass: HomeAssistant, send: AsyncMock) -> None:
+    # Stopped on Cruise: the select still shows the pattern.
+    assert hass.states.get("select.mamaroo_motion").state == "cruise"
+    await hass.services.async_call(
+        "select", "select_option",
+        {"entity_id": "select.mamaroo_motion", "option": "rock"}, blocking=True,
+    )
+    assert [c.args[0] for c in send.call_args_list] == [
+        bytes.fromhex("430404"), bytes.fromhex("430201"),
+    ]
+
+
+@pytest.mark.state(MOVING)
+async def test_switching_motion_while_moving(hass: HomeAssistant, send: AsyncMock) -> None:
+    await hass.services.async_call(
+        "select", "select_option",
+        {"entity_id": "select.mamaroo_motion", "option": "bounce"}, blocking=True,
+    )
+    assert send.call_args_list[0].args[0] == bytes.fromhex("430402")
+    assert len(send.call_args_list) == 1

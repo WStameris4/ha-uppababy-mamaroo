@@ -37,6 +37,16 @@
       "panel_lock": { "name": "Panel lock" }
     },
     "select": {
+      "motion_pattern": {
+        "name": "Motion",
+        "state": {
+          "cruise": "Cruise",
+          "bounce": "Bounce",
+          "sway": "Sway",
+          "rock": "Rock",
+          "wave": "Wave"
+        }
+      },
       "sound_track": {
         "name": "Sound track",
         "state": {
