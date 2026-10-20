@@ -1,4 +1,4 @@
-"""Power, sound and panel-lock switches."""
+"""Power, motion, sound and panel-lock switches."""
 
 from __future__ import annotations
 
@@ -21,6 +21,8 @@ class MamarooSwitchDescription(SwitchEntityDescription):
 
     field: int
     value: Callable[[protocol.SwingState], bool]
+    # Turning on also powers the swing on, as the panel does.
+    needs_power: bool = False
 
 
 SWITCHES = (
@@ -28,7 +30,16 @@ SWITCHES = (
         key="power", field=protocol.FIELD_POWER, value=lambda s: s.power
     ),
     MamarooSwitchDescription(
-        key="sound", field=protocol.FIELD_SOUND_ENABLED, value=lambda s: s.sound_enabled
+        key="motion",
+        field=protocol.FIELD_MOTION_ENABLED,
+        value=lambda s: s.power and s.motion_enabled,
+        needs_power=True,
+    ),
+    MamarooSwitchDescription(
+        key="sound",
+        field=protocol.FIELD_SOUND_ENABLED,
+        value=lambda s: s.power and s.sound_enabled,
+        needs_power=True,
     ),
     MamarooSwitchDescription(
         key="panel_lock",
@@ -66,7 +77,12 @@ class MamarooSwitch(MamarooEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn on."""
-        await self._send(protocol.set_flag(self.entity_description.field, True))
+        description = self.entity_description
+        commands = []
+        if description.needs_power and not self.state_data.power:
+            commands.append(protocol.set_flag(protocol.FIELD_POWER, True))
+        commands.append(protocol.set_flag(description.field, True))
+        await self._send(*commands)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn off."""

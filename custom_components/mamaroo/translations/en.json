@@ -16,29 +16,15 @@
     }
   },
   "entity": {
-    "fan": {
-      "motion": {
-        "state_attributes": {
-          "preset_mode": {
-            "state": {
-              "cruise": "Cruise",
-              "bounce": "Bounce",
-              "sway": "Sway",
-              "rock": "Rock",
-              "wave": "Wave"
-            }
-          }
-        }
-      }
-    },
     "switch": {
       "power": { "name": "Power" },
+      "motion": { "name": "Motion" },
       "sound": { "name": "Sound" },
       "panel_lock": { "name": "Panel lock" }
     },
     "select": {
       "motion_pattern": {
-        "name": "Motion",
+        "name": "Motion pattern",
         "state": {
           "cruise": "Cruise",
           "bounce": "Bounce",
@@ -50,14 +36,16 @@
       "sound_track": {
         "name": "Sound track",
         "state": {
-          "sound_1": "Sound 1",
-          "sound_2": "Sound 2",
-          "sound_3": "Sound 3",
-          "sound_4": "Sound 4"
+          "jingle": "Jingle",
+          "bliss": "Bliss",
+          "chirp": "Chirp",
+          "tide": "Tide",
+          "bluetooth_streaming": "Bluetooth streaming"
         }
       }
     },
     "number": {
+      "speed": { "name": "Speed" },
       "volume": { "name": "Volume" },
       "shutdown_timer": { "name": "Shutdown timer" }
     }

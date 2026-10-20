@@ -16,6 +16,7 @@ from custom_components.mamaroo.device import MamarooDevice
 
 MOVING = protocol.parse_status(bytes.fromhex("53050504040101010000380e0003000000000000"))
 IDLE = protocol.parse_status(bytes.fromhex("5301000000010000000038400003000000000000"))
+OFF = protocol.parse_status(bytes.fromhex("5305000000000000000038400003000000000000"))
 TIMED = protocol.parse_status(bytes.fromhex("5305010000010100000007070102000000000000"))
 
 
@@ -44,38 +45,79 @@ async def send(hass: HomeAssistant, request: pytest.FixtureRequest) -> AsyncGene
 
 @pytest.mark.state(MOVING)
 async def test_states_follow_the_report(hass: HomeAssistant, send: AsyncMock) -> None:
-    fan = hass.states.get("fan.mamaroo")
-    assert fan.state == "on"
-    assert fan.attributes["preset_mode"] == "wave"
-    assert fan.attributes["percentage"] == 100
-    assert hass.states.get("select.mamaroo_sound_track").state == "sound_4"
-    assert hass.states.get("number.mamaroo_volume").state == "4"
+    assert hass.states.get("switch.mamaroo_power").state == "on"
+    assert hass.states.get("switch.mamaroo_motion").state == "on"
+    assert hass.states.get("select.mamaroo_motion_pattern").state == "wave"
+    assert hass.states.get("number.mamaroo_speed").state == "5"
     assert hass.states.get("switch.mamaroo_sound").state == "on"
+    assert hass.states.get("select.mamaroo_sound_track").state == "tide"
+    assert hass.states.get("number.mamaroo_volume").state == "4"
+    assert hass.states.get("fan.mamaroo") is None
 
 
 @pytest.mark.state(IDLE)
-async def test_controls_send_the_panel_commands(hass: HomeAssistant, send: AsyncMock) -> None:
-    await hass.services.async_call(
-        "fan", "set_preset_mode",
-        {"entity_id": "fan.mamaroo", "preset_mode": "sway"}, blocking=True,
-    )
-    assert [c.args[0] for c in send.call_args_list] == [
-        bytes.fromhex("430403"), bytes.fromhex("430201"),
-    ]
+async def test_stopped_swing(hass: HomeAssistant, send: AsyncMock) -> None:
+    assert hass.states.get("switch.mamaroo_motion").state == "off"
+    # The pattern is still shown; speed reads 0 from the swing, shown as unknown.
+    assert hass.states.get("select.mamaroo_motion_pattern").state == "cruise"
+    assert hass.states.get("number.mamaroo_speed").state == "unknown"
+
+
+async def _call(hass: HomeAssistant, domain: str, service: str, **data) -> None:
+    await hass.services.async_call(domain, service, data, blocking=True)
+
+
+def _sent(send: AsyncMock) -> list[bytes]:
+    return [call.args[0] for call in send.call_args_list]
+
+
+@pytest.mark.state(IDLE)
+async def test_motion_switch(hass: HomeAssistant, send: AsyncMock) -> None:
+    await _call(hass, "switch", "turn_on", entity_id="switch.mamaroo_motion")
+    assert _sent(send) == [bytes.fromhex("430201")]
     send.reset_mock()
-    await hass.services.async_call(
-        "select", "select_option",
-        {"entity_id": "select.mamaroo_sound_track", "option": "sound_2"}, blocking=True,
+    await _call(hass, "switch", "turn_off", entity_id="switch.mamaroo_motion")
+    assert _sent(send) == [bytes.fromhex("430200")]
+
+
+@pytest.mark.state(OFF)
+async def test_motion_switch_powers_on_first(hass: HomeAssistant, send: AsyncMock) -> None:
+    await _call(hass, "switch", "turn_on", entity_id="switch.mamaroo_motion")
+    assert _sent(send) == [bytes.fromhex("430101"), bytes.fromhex("430201")]
+
+
+@pytest.mark.state(IDLE)
+async def test_speed_and_volume(hass: HomeAssistant, send: AsyncMock) -> None:
+    await _call(hass, "number", "set_value", entity_id="number.mamaroo_speed", value=3)
+    await _call(hass, "number", "set_value", entity_id="number.mamaroo_volume", value=2)
+    assert _sent(send) == [bytes.fromhex("430603"), bytes.fromhex("430702")]
+
+
+@pytest.mark.state(IDLE)
+async def test_choosing_a_motion_starts_it(hass: HomeAssistant, send: AsyncMock) -> None:
+    await _call(
+        hass, "select", "select_option",
+        entity_id="select.mamaroo_motion_pattern", option="rock",
     )
-    assert [c.args[0] for c in send.call_args_list] == [
-        bytes.fromhex("430502"), bytes.fromhex("430301"),
-    ]
-    send.reset_mock()
-    await hass.services.async_call(
-        "number", "set_value",
-        {"entity_id": "number.mamaroo_volume", "value": 3}, blocking=True,
+    assert _sent(send) == [bytes.fromhex("430404"), bytes.fromhex("430201")]
+
+
+@pytest.mark.state(MOVING)
+async def test_switching_motion_while_moving(hass: HomeAssistant, send: AsyncMock) -> None:
+    await _call(
+        hass, "select", "select_option",
+        entity_id="select.mamaroo_motion_pattern", option="bounce",
     )
-    assert send.call_args.args[0] == bytes.fromhex("430703")
+    assert _sent(send) == [bytes.fromhex("430402")]
+
+
+@pytest.mark.state(IDLE)
+async def test_choosing_a_sound_turns_sound_on(hass: HomeAssistant, send: AsyncMock) -> None:
+    await _call(
+        hass, "select", "select_option",
+        entity_id="select.mamaroo_sound_track", option="bliss",
+    )
+    assert _sent(send) == [bytes.fromhex("430502"), bytes.fromhex("430301")]
 
 
 @pytest.mark.state(TIMED)
@@ -83,37 +125,11 @@ async def test_timer_shows_minutes_left_and_sets_minutes(
     hass: HomeAssistant, send: AsyncMock
 ) -> None:
     assert hass.states.get("number.mamaroo_shutdown_timer").state == "30"
-    await hass.services.async_call(
-        "number", "set_value",
-        {"entity_id": "number.mamaroo_shutdown_timer", "value": 45}, blocking=True,
-    )
-    assert send.call_args.args[0] == bytes.fromhex("430a2d")
+    await _call(hass, "number", "set_value", entity_id="number.mamaroo_shutdown_timer", value=45)
+    assert _sent(send) == [bytes.fromhex("430a2d")]
 
 
 @pytest.mark.state(IDLE)
 async def test_timer_off_reads_zero(hass: HomeAssistant, send: AsyncMock) -> None:
     # Idle, the swing reports a 4 h countdown that is not an active timer.
     assert hass.states.get("number.mamaroo_shutdown_timer").state == "0"
-
-
-@pytest.mark.state(IDLE)
-async def test_choosing_a_motion_starts_it(hass: HomeAssistant, send: AsyncMock) -> None:
-    # Stopped on Cruise: the select still shows the pattern.
-    assert hass.states.get("select.mamaroo_motion").state == "cruise"
-    await hass.services.async_call(
-        "select", "select_option",
-        {"entity_id": "select.mamaroo_motion", "option": "rock"}, blocking=True,
-    )
-    assert [c.args[0] for c in send.call_args_list] == [
-        bytes.fromhex("430404"), bytes.fromhex("430201"),
-    ]
-
-
-@pytest.mark.state(MOVING)
-async def test_switching_motion_while_moving(hass: HomeAssistant, send: AsyncMock) -> None:
-    await hass.services.async_call(
-        "select", "select_option",
-        {"entity_id": "select.mamaroo_motion", "option": "bounce"}, blocking=True,
-    )
-    assert send.call_args_list[0].args[0] == bytes.fromhex("430402")
-    assert len(send.call_args_list) == 1

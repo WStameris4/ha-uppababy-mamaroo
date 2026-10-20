@@ -16,7 +16,7 @@ from homeassistant.helpers.typing import ConfigType
 from .const import CONF_ADDRESS, CONF_PAIRING_ID, DOMAIN, SERVICE_SEND_COMMAND
 from .device import MamarooDevice, MamarooError
 
-PLATFORMS = [Platform.FAN, Platform.NUMBER, Platform.SELECT, Platform.SWITCH]
+PLATFORMS = [Platform.NUMBER, Platform.SELECT, Platform.SWITCH]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 type MamarooConfigEntry = ConfigEntry[MamarooDevice]

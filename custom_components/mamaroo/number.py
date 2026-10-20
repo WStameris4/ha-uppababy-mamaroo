@@ -1,4 +1,4 @@
-"""Sound volume and the shutdown timer."""
+"""Speed, sound volume and the shutdown timer."""
 
 from __future__ import annotations
 
@@ -18,8 +18,29 @@ async def async_setup_entry(
     entry: MamarooConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add the volume and timer numbers."""
-    async_add_entities([MamarooVolume(entry), MamarooTimer(entry)])
+    """Add the speed, volume and timer numbers."""
+    async_add_entities([MamarooSpeed(entry), MamarooVolume(entry), MamarooTimer(entry)])
+
+
+class MamarooSpeed(MamarooEntity, NumberEntity):
+    """Motion speed, 1-5 like the panel's speed lights."""
+
+    _attr_native_min_value = 1
+    _attr_native_max_value = 5
+    _attr_native_step = 1
+    _attr_mode = NumberMode.SLIDER
+
+    def __init__(self, entry: MamarooConfigEntry) -> None:
+        super().__init__(entry, "speed")
+
+    @property
+    def native_value(self) -> float | None:
+        """Current speed; the swing reports 0 while motion is off."""
+        return self.state_data.speed or None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the speed."""
+        await self._send(protocol.set_field(protocol.FIELD_SPEED, int(value)))
 
 
 class MamarooVolume(MamarooEntity, NumberEntity):

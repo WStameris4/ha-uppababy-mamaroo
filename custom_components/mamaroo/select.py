@@ -8,10 +8,13 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import MamarooConfigEntry, protocol
 from .entity import MamarooEntity
-from .fan import MOTIONS
 
-# Numbered as on the panel; the swing reports 0 until one is chosen.
-SOUNDS = ["sound_1", "sound_2", "sound_3", "sound_4"]
+# Order as printed on the panel and in the manual; the swing numbers them 1-5.
+MOTIONS = ["cruise", "bounce", "sway", "rock", "wave"]
+
+# The app's names for the mamaRoo5's sounds 1-5 (5 plays audio streamed over
+# Bluetooth); the swing reports 0 until one is chosen.
+SOUNDS = ["jingle", "bliss", "chirp", "tide", "bluetooth_streaming"]
 
 
 async def async_setup_entry(
