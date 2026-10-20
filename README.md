@@ -49,7 +49,7 @@ app's pairing, so the UPPAbaby Connect app may need to be paired again.
 | Sound switch | Turns the built-in sound on or off (powering the swing on first if needed) |
 | Sound track select | Jingle, Bliss, Chirp, Tide (the panel's sounds 1–4, named as in the UPPAbaby Connect app) |
 | Volume number | 1–4, like the panel's volume lights |
-| Shutdown timer number | Minutes until the swing stops; shows the time left while set, 0 when off; setting 0 cancels |
+| Timer number | Minutes until the swing stops; shows the time left while set, 0 when off; setting 0 cancels |
 | Panel lock switch | Locks the touch panel |
 
 The swing pushes its state about once a second. Nothing is polled.

@@ -46,7 +46,7 @@
     "number": {
       "speed": { "name": "Speed" },
       "volume": { "name": "Volume" },
-      "shutdown_timer": { "name": "Shutdown timer" }
+      "shutdown_timer": { "name": "Timer" }
     }
   },
   "services": {

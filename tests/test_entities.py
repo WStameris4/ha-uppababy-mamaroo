@@ -135,12 +135,12 @@ async def test_choosing_a_sound_turns_sound_on(hass: HomeAssistant, send: AsyncM
 async def test_timer_shows_minutes_left_and_sets_minutes(
     hass: HomeAssistant, send: AsyncMock
 ) -> None:
-    assert hass.states.get("number.mamaroo_shutdown_timer").state == "30"
-    await _call(hass, "number", "set_value", entity_id="number.mamaroo_shutdown_timer", value=45)
+    assert hass.states.get("number.mamaroo_timer").state == "30"
+    await _call(hass, "number", "set_value", entity_id="number.mamaroo_timer", value=45)
     assert _sent(send) == [bytes.fromhex("430a2d")]
 
 
 @pytest.mark.state(IDLE)
 async def test_timer_off_reads_zero(hass: HomeAssistant, send: AsyncMock) -> None:
     # Idle, the swing reports a 4 h countdown that is not an active timer.
-    assert hass.states.get("number.mamaroo_shutdown_timer").state == "0"
+    assert hass.states.get("number.mamaroo_timer").state == "0"
