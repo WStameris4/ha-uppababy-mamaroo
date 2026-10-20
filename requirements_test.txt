@@ -1,0 +1,11 @@
+pytest-homeassistant-custom-component
+# The bluetooth integration's own requirements (not pulled in by the above).
+bleak
+bleak-retry-connector
+bluetooth-adapters
+bluetooth-auto-recovery
+bluetooth-data-tools
+dbus-fast
+habluetooth
+aiousbwatcher
+serialx

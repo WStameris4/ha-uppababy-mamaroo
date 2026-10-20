@@ -1,0 +1,49 @@
+{
+  "config": {
+    "flow_title": "{name}",
+    "step": {
+      "pair": {
+        "title": "Pair with the swing",
+        "description": "Turn the swing on and put it in pairing mode (hold the music button), then select Submit within 30 seconds. Pairing Home Assistant may sign the UPPAbaby Connect app out of the swing."
+      }
+    },
+    "error": {
+      "pairing_failed": "The swing did not accept the pairing. Check that it is in pairing mode and try again."
+    },
+    "abort": {
+      "already_configured": "This swing is already set up.",
+      "no_devices_found": "No swing is advertising nearby."
+    }
+  },
+  "entity": {
+    "fan": {
+      "motion": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "cruise": "Cruise",
+              "bounce": "Bounce",
+              "sway": "Sway",
+              "rock": "Rock",
+              "wave": "Wave"
+            }
+          }
+        }
+      }
+    },
+    "switch": {
+      "power": { "name": "Power" },
+      "sound": { "name": "Sound" },
+      "panel_lock": { "name": "Panel lock" }
+    }
+  },
+  "services": {
+    "send_command": {
+      "name": "Send raw command",
+      "description": "Writes raw bytes to the swing's control characteristic. For protocol debugging.",
+      "fields": {
+        "data": { "name": "Data", "description": "Command bytes as hex, e.g. 430101 (power on)." }
+      }
+    }
+  }
+}

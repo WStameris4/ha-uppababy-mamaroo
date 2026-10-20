@@ -1,0 +1,20 @@
+{
+  "domain": "mamaroo",
+  "name": "UPPAbaby Mamaroo Smart Swing",
+  "bluetooth": [
+    {
+      "service_uuid": "622d0100-2416-0fa7-e132-2f1495cc2ce0",
+      "connectable": true
+    }
+  ],
+  "codeowners": ["@WStameris4"],
+  "config_flow": true,
+  "dependencies": ["bluetooth_adapters"],
+  "documentation": "https://github.com/WStameris4/ha-mamaroo",
+  "integration_type": "device",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/WStameris4/ha-mamaroo/issues",
+  "loggers": ["bleak", "bleak_retry_connector"],
+  "requirements": [],
+  "version": "0.1.0"
+}
