@@ -15,7 +15,10 @@ def test_field_writes() -> None:
     assert protocol.set_flag(protocol.FIELD_POWER, True) == bytes.fromhex("430101")
     assert protocol.set_flag(protocol.FIELD_MOTION_ENABLED, False) == bytes.fromhex("430200")
     assert protocol.set_field(protocol.FIELD_SPEED, 5) == bytes.fromhex("430605")
-    assert protocol.set_timer(300) == bytes.fromhex("430a012c")
+    # One byte of minutes; the mamaRoo5 ignores the second byte of the
+    # two-byte form and treats 43 0a 00 as "cancel".
+    assert protocol.set_timer(30) == bytes.fromhex("430a1e")
+    assert protocol.set_timer(0) == bytes.fromhex("430a00")
 
 
 def test_pairing_commands() -> None:
@@ -74,3 +77,9 @@ def test_parse_captured_packets() -> None:
     # The 0x41 acknowledgement of a write carries the same layout.
     ack = protocol.parse_status(bytes.fromhex("41010100000101010000383d0003000000000000"))
     assert ack.sound_enabled and ack.motion == 1 and ack.speed == 1
+
+
+def test_parse_running_timer() -> None:
+    # 30-minute timer set while moving: 1799 s left, active flag set.
+    state = protocol.parse_status(bytes.fromhex("5305010000010100000007070102000000000000"))
+    assert state.timer_active and state.timer_seconds == 1799

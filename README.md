@@ -7,7 +7,7 @@ supports active connections. It uses no cloud and no account.
 
 > **Status: early.** The protocol was decoded from the UPPAbaby Connect Android app
 > (v1.0.2) and checked against a real swing for pairing, motion, speed, sound and
-> volume. The shutdown timer and presets are not exposed yet.
+> volume, and the shutdown timer. Presets are not exposed yet.
 
 > **Safety.** The swing is not designed for sleep or unsupervised use (see the UPPAbaby
 > manual). Only start motion remotely when someone is with the baby.
@@ -47,6 +47,7 @@ app's pairing, so the UPPAbaby Connect app may need to be paired again.
 | Sound switch | Turns the built-in sound on or off |
 | Sound track select | Sound 1–4, as numbered on the panel |
 | Volume number | 1–4, like the panel's volume lights |
+| Shutdown timer number | Minutes until the swing stops; shows the time left while set, 0 when off; setting 0 cancels |
 | Panel lock switch | Locks the touch panel |
 
 The swing pushes its state about once a second. Nothing is polled.
@@ -81,9 +82,10 @@ opcode they answer.
 | `43 05 <n>` | Sound track, 1–4 |
 | `43 06 <n>` | Speed, 1–5 |
 | `43 07 <n>` | Volume, 1–4 |
-| `43 0A <u16>` | Shutdown timer |
+| `43 0A <n>` | Shutdown timer, *n* minutes (one byte); `00` cancels |
 | `43 0B <0/1>` | Panel lock |
-| `DB <n>` | Start preset *n* |
+| `DB <n>` | Start preset *n* (untested) |
+| `DC <n>` | Read preset *n*; reply `DC <status> <motion> <speed> <sound> <volume> …`, status 0 = saved, 1 = empty |
 | `41 …` | The swing's acknowledgement of a `43` write, in the same layout as `53` |
 | `53 …` | State report, about once a second: motion, speed, sound, volume, power, motion on, sound on, timer (seconds left, big-endian u16 at bytes 10–11), timer active, preset, panel lock |
 

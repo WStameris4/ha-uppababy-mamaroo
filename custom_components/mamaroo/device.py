@@ -222,6 +222,9 @@ class MamarooDevice:
         self._hass = hass
         self._pairing_id = pairing_id
         self._address = address
+        # Addresses that have completed a handshake. One swing advertises
+        # several, and some never accept a connection; only those are avoided.
+        self._good: set[str] = {address} if address else set()
         self._failed: dict[str, float] = {}
         self._session: MamarooSession | None = None
         self._task: asyncio.Task[None] | None = None
@@ -306,6 +309,12 @@ class MamarooDevice:
         avoid = [a for a, when in self._failed.items() if now - when < AVOID_SECONDS]
         return latest_swing(self._hass, self._address, avoid)
 
+    def _record_failure(self, address: str) -> None:
+        # A one-off GATT error on an address that works is not a reason to
+        # wander off to one that never has.
+        if address not in self._good:
+            self._failed[address] = monotonic_time_coarse()
+
     async def _connect(self) -> None:
         device = self._pick()
         if device is None:
@@ -316,9 +325,7 @@ class MamarooDevice:
                 device, self._pick, self._disconnected, self._status, max_attempts=2
             )
         except BleakError:
-            self._failed[device.address] = monotonic_time_coarse()
-            if self._address == device.address:
-                self._address = None
+            self._record_failure(device.address)
             raise
         try:
             await self._handshake(session)
@@ -326,10 +333,11 @@ class MamarooDevice:
             await session.close()
             raise
         except BaseException:
-            self._failed[device.address] = monotonic_time_coarse()
+            self._record_failure(device.address)
             await session.close()
             raise
         self._failed.pop(device.address, None)
+        self._good.add(device.address)
         self._address = device.address
         self._session = session
         self._lost_at = None

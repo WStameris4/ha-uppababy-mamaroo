@@ -16,6 +16,7 @@ from custom_components.mamaroo.device import MamarooDevice
 
 MOVING = protocol.parse_status(bytes.fromhex("53050504040101010000380e0003000000000000"))
 IDLE = protocol.parse_status(bytes.fromhex("5301000000010000000038400003000000000000"))
+TIMED = protocol.parse_status(bytes.fromhex("5305010000010100000007070102000000000000"))
 
 
 @pytest.fixture
@@ -75,3 +76,21 @@ async def test_controls_send_the_panel_commands(hass: HomeAssistant, send: Async
         {"entity_id": "number.mamaroo_volume", "value": 3}, blocking=True,
     )
     assert send.call_args.args[0] == bytes.fromhex("430703")
+
+
+@pytest.mark.state(TIMED)
+async def test_timer_shows_minutes_left_and_sets_minutes(
+    hass: HomeAssistant, send: AsyncMock
+) -> None:
+    assert hass.states.get("number.mamaroo_shutdown_timer").state == "30"
+    await hass.services.async_call(
+        "number", "set_value",
+        {"entity_id": "number.mamaroo_shutdown_timer", "value": 45}, blocking=True,
+    )
+    assert send.call_args.args[0] == bytes.fromhex("430a2d")
+
+
+@pytest.mark.state(IDLE)
+async def test_timer_off_reads_zero(hass: HomeAssistant, send: AsyncMock) -> None:
+    # Idle, the swing reports a 4 h countdown that is not an active timer.
+    assert hass.states.get("number.mamaroo_shutdown_timer").state == "0"

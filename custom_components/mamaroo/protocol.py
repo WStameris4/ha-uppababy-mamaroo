@@ -46,8 +46,12 @@ def set_flag(field: int, on: bool) -> bytes:
 
 
 def set_timer(minutes: int) -> bytes:
-    """Build a shutdown-timer write (big-endian u16; 0 cancels)."""
-    return bytes((OP_SET, FIELD_TIMER, (minutes >> 8) & 0xFF, minutes & 0xFF))
+    """Build a shutdown-timer write: one byte of minutes, 0 cancels.
+
+    The app also has a two-byte form for other models; the mamaRoo5 reads
+    only its first byte, so it must not be used here.
+    """
+    return bytes((OP_SET, FIELD_TIMER, minutes & 0xFF))
 
 
 def get_bluetooth_id() -> bytes:

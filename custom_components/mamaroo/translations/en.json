@@ -48,7 +48,8 @@
       }
     },
     "number": {
-      "volume": { "name": "Volume" }
+      "volume": { "name": "Volume" },
+      "shutdown_timer": { "name": "Shutdown timer" }
     }
   },
   "services": {

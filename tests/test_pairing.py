@@ -110,3 +110,10 @@ async def test_reconnect_refused(hass: HomeAssistant) -> None:
     with pytest.raises(MamarooError, match="refused"):
         await _connect(hass, client)
     assert not client.is_connected
+
+
+async def test_a_working_address_is_never_avoided(hass: HomeAssistant) -> None:
+    device = MamarooDevice(hass, PAIRING_ID, "7E:17:C2:25:47:0E")
+    device._record_failure("7E:17:C2:25:47:0E")
+    device._record_failure("42:2D:8F:6D:FB:52")
+    assert list(device._failed) == ["42:2D:8F:6D:FB:52"]
