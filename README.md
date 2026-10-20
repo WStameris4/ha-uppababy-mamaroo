@@ -47,7 +47,7 @@ app's pairing, so the UPPAbaby Connect app may need to be paired again.
 | Motion pattern select | Cruise, Bounce, Sway, Rock, Wave; choosing one starts it, like tapping its icon on the panel |
 | Speed number | 1–5, like the panel's speed lights |
 | Sound switch | Turns the built-in sound on or off (powering the swing on first if needed) |
-| Sound track select | Jingle, Bliss, Chirp, Tide (the panel's sounds 1–4, named as in the UPPAbaby Connect app) and Bluetooth streaming |
+| Sound track select | Jingle, Bliss, Chirp, Tide (the panel's sounds 1–4, named as in the UPPAbaby Connect app) |
 | Volume number | 1–4, like the panel's volume lights |
 | Shutdown timer number | Minutes until the swing stops; shows the time left while set, 0 when off; setting 0 cancels |
 | Panel lock switch | Locks the touch panel |
@@ -81,7 +81,7 @@ opcode they answer.
 | `43 02 <0/1>` | Motion on/off |
 | `43 03 <0/1>` | Sound on/off |
 | `43 04 <n>` | Motion pattern, 1–5 = the panel's icons left to right |
-| `43 05 <n>` | Sound track: 1 Jingle, 2 Bliss, 3 Chirp, 4 Tide, 5 Bluetooth streaming |
+| `43 05 <n>` | Sound track: 1 Jingle, 2 Bliss, 3 Chirp, 4 Tide |
 | `43 06 <n>` | Speed, 1–5 |
 | `43 07 <n>` | Volume, 1–4 |
 | `43 0A <n>` | Shutdown timer, *n* minutes (one byte); `00` cancels |

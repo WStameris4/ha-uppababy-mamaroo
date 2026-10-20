@@ -12,9 +12,9 @@ from .entity import MamarooEntity
 # Order as printed on the panel and in the manual; the swing numbers them 1-5.
 MOTIONS = ["cruise", "bounce", "sway", "rock", "wave"]
 
-# The app's names for the mamaRoo5's sounds 1-5 (5 plays audio streamed over
-# Bluetooth); the swing reports 0 until one is chosen.
-SOUNDS = ["jingle", "bliss", "chirp", "tide", "bluetooth_streaming"]
+# The app's names for the mamaRoo5's built-in sounds 1-4; the swing reports
+# 0 until one is chosen.
+SOUNDS = ["jingle", "bliss", "chirp", "tide"]
 
 
 async def async_setup_entry(
