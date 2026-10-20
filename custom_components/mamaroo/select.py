@@ -60,8 +60,8 @@ class MamarooSound(MamarooEntity, SelectEntity):
 
     @property
     def current_option(self) -> str | None:
-        """The selected sound, or none before one is chosen."""
-        index = self.state_data.sound - 1
+        """The selected sound, or the last one while sound is off."""
+        index = self._device.last_sound - 1
         return SOUNDS[index] if 0 <= index < len(SOUNDS) else None
 
     async def async_select_option(self, option: str) -> None:

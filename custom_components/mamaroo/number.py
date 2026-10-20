@@ -35,8 +35,8 @@ class MamarooSpeed(MamarooEntity, NumberEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Current speed; the swing reports 0 while motion is off."""
-        return self.state_data.speed or None
+        """Current speed, or the last one while motion is off."""
+        return self._device.last_speed or None
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the speed."""
@@ -56,8 +56,8 @@ class MamarooVolume(MamarooEntity, NumberEntity):
 
     @property
     def native_value(self) -> float | None:
-        """Current volume, or none before a sound has been chosen."""
-        return self.state_data.volume or None
+        """Current volume, or the last one while sound is off."""
+        return self._device.last_volume or None
 
     async def async_set_native_value(self, value: float) -> None:
         """Set the volume."""

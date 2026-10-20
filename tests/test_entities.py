@@ -58,9 +58,20 @@ async def test_states_follow_the_report(hass: HomeAssistant, send: AsyncMock) ->
 @pytest.mark.state(IDLE)
 async def test_stopped_swing(hass: HomeAssistant, send: AsyncMock) -> None:
     assert hass.states.get("switch.mamaroo_motion").state == "off"
-    # The pattern is still shown; speed reads 0 from the swing, shown as unknown.
+    # The pattern is still shown; speed has never been reported, so unknown.
     assert hass.states.get("select.mamaroo_motion_pattern").state == "cruise"
     assert hass.states.get("number.mamaroo_speed").state == "unknown"
+
+
+@pytest.mark.state(MOVING)
+async def test_last_values_stay_while_off(hass: HomeAssistant, send: AsyncMock) -> None:
+    # Stopping motion and sound makes the swing report 0 for all three.
+    hass.config_entries.async_entries(DOMAIN)[0].runtime_data._status(OFF)
+    await hass.async_block_till_done()
+    assert hass.states.get("switch.mamaroo_motion").state == "off"
+    assert hass.states.get("number.mamaroo_speed").state == "5"
+    assert hass.states.get("select.mamaroo_sound_track").state == "tide"
+    assert hass.states.get("number.mamaroo_volume").state == "4"
 
 
 async def _call(hass: HomeAssistant, domain: str, service: str, **data) -> None:

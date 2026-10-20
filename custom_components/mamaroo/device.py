@@ -237,6 +237,11 @@ class MamarooDevice:
         self._lost_at: float | None = None
         self._grace: asyncio.TimerHandle | None = None
         self.state: protocol.SwingState | None = None
+        # The swing reports 0 for speed while motion is off and for sound and
+        # volume while sound is off; these keep the last real values to show.
+        self.last_speed = 0
+        self.last_sound = 0
+        self.last_volume = 0
 
     @property
     def connected(self) -> bool:
@@ -267,6 +272,9 @@ class MamarooDevice:
     @callback
     def _status(self, state: protocol.SwingState) -> None:
         self.state = state
+        self.last_speed = state.speed or self.last_speed
+        self.last_sound = state.sound or self.last_sound
+        self.last_volume = state.volume or self.last_volume
         self._notify_listeners()
 
     @callback
