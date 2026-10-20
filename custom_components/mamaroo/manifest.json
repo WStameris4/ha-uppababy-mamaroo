@@ -16,5 +16,5 @@
   "issue_tracker": "https://github.com/WStameris4/ha-uppababy-mamaroo/issues",
   "loggers": ["bleak", "bleak_retry_connector"],
   "requirements": [],
-  "version": "0.1.3"
+  "version": "0.1.4"
 }

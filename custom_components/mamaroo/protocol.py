@@ -11,8 +11,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
+OP_ACK = 0x41  # "A": state after a 0x43 write, same layout as a status report
 OP_SET = 0x43  # "C": set one field, 0x43 <field> <value...>
-OP_STATUS = 0x53  # "S": state report from the swing
+OP_STATUS = 0x53  # "S": state report from the swing, about once a second
 OP_GET_BLUETOOTH_ID = 0xB0
 OP_SET_PAIRING_ID = 0xB1
 OP_HANDSHAKE = 0xB2
@@ -97,7 +98,12 @@ def handshake_ok(data: bytes) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class SwingState:
-    """State report from a mamaRoo5 (the app's MMR5 status layout)."""
+    """State report from a mamaRoo5 (the app's MMR5 status layout).
+
+    Confirmed against the panel: motion 1-5 = the panel's icons left to right,
+    speed 1-5, sound 1-4, volume 1-4; the timer counts down in seconds while
+    moving (14400 = 4 h when idle).
+    """
 
     motion: int
     speed: int
@@ -107,14 +113,14 @@ class SwingState:
     motion_enabled: bool
     sound_enabled: bool
     timer_active: bool
-    timer_minutes: int
+    timer_seconds: int
     preset: int
     panel_locked: bool
 
 
 def parse_status(data: bytes) -> SwingState:
-    """Parse a 0x53 state report."""
-    if len(data) < 13 or data[0] != OP_STATUS:
+    """Parse a 0x53 state report or a 0x41 write acknowledgement."""
+    if len(data) < 13 or data[0] not in (OP_STATUS, OP_ACK):
         raise ValueError(f"not a status packet: {data.hex()}")
     return SwingState(
         motion=data[1],
@@ -124,7 +130,7 @@ def parse_status(data: bytes) -> SwingState:
         power=data[5] == 1,
         motion_enabled=data[6] == 1,
         sound_enabled=data[7] == 1,
-        timer_minutes=(data[10] << 8) | data[11],
+        timer_seconds=(data[10] << 8) | data[11],
         timer_active=data[12] == 1,
         preset=data[14] if len(data) > 14 else 0,
         panel_locked=len(data) > 15 and data[15] == 1,

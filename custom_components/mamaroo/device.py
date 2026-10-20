@@ -23,10 +23,15 @@ from .const import CHAR_UUID, SERVICE_UUID
 _LOGGER = logging.getLogger(__name__)
 
 FRESH_SECONDS = 60
+PREFER_SECONDS = 900
 REPLY_TIMEOUT = 3.0
 WRITE_TIMEOUT = 5.0
 PAIRING_TIMEOUT = 30.0
 AVOID_SECONDS = 300
+# The swing ends every connection after about 30 s (HCI 0x13, remote user
+# terminated) and the reconnect takes 2-3 s, so ride through short gaps.
+GRACE_SECONDS = 15
+SEND_WAIT_SECONDS = 10
 RECONNECT_DELAYS = (2, 5, 10, 30, 60)
 
 
@@ -39,25 +44,29 @@ def latest_swing(
     prefer: str | None = None,
     avoid: Collection[str] = (),
 ) -> BLEDevice | None:
-    """Return the address to connect to, from those heard in the last minute.
+    """Return the address to connect to.
 
     One swing advertises under several addresses at once (one of them changes
-    at every power-up), and not all of them accept connections, so it is found
-    by its service UUID rather than a stored MAC. The address that last worked
-    wins while it is still advertising; otherwise the loudest one not recently
-    failed, falling back to the loudest of all.
+    at power-up and on a timer), and not all of them accept connections, so it
+    is found by its service UUID rather than a stored MAC. The address that
+    last worked wins if heard in the last 15 minutes; otherwise the loudest one
+    heard in the last minute and not recently failed, falling back to the
+    loudest of all.
     """
     now = monotonic_time_coarse()
-    infos = [
+    swings = [
         info
         for info in bluetooth.async_discovered_service_info(hass, connectable=True)
-        if SERVICE_UUID in info.service_uuids and now - info.time < FRESH_SECONDS
+        if SERVICE_UUID in info.service_uuids
     ]
+    # A connected identity stops advertising, so the address that just worked
+    # looks stale after a few connect/disconnect cycles; give it longer.
+    for info in swings:
+        if info.address == prefer and now - info.time < PREFER_SECONDS:
+            return info.device
+    infos = [info for info in swings if now - info.time < FRESH_SECONDS]
     if not infos:
         return None
-    for info in infos:
-        if info.address == prefer:
-            return info.device
     usable = [info for info in infos if info.address not in avoid] or infos
     return max(usable, key=lambda info: info.rssi).device
 
@@ -116,7 +125,7 @@ class MamarooSession:
         _LOGGER.debug("notify %s", data.hex())
         if not data:
             return
-        if data[0] == protocol.OP_STATUS:
+        if data[0] in (protocol.OP_STATUS, protocol.OP_ACK):
             try:
                 state = protocol.parse_status(data)
             except ValueError:
@@ -221,12 +230,25 @@ class MamarooDevice:
         self._unsub_adv: CALLBACK_TYPE | None = None
         self._listeners: set[Callable[[], None]] = set()
         self._lock = asyncio.Lock()
+        self._ready = asyncio.Event()
+        self._lost_at: float | None = None
+        self._grace: asyncio.TimerHandle | None = None
         self.state: protocol.SwingState | None = None
 
     @property
-    def available(self) -> bool:
-        """Whether commands can be sent right now."""
+    def connected(self) -> bool:
+        """Whether the handshaken link is up right now."""
         return self._session is not None and self._session.connected
+
+    @property
+    def available(self) -> bool:
+        """Connected, or only just dropped and probably reconnecting."""
+        if self.connected:
+            return True
+        return (
+            self._lost_at is not None
+            and monotonic_time_coarse() - self._lost_at < GRACE_SECONDS
+        )
 
     @callback
     def add_listener(self, update: Callable[[], None]) -> CALLBACK_TYPE:
@@ -269,6 +291,8 @@ class MamarooDevice:
         """Stop the loop and disconnect."""
         if self._unsub_adv:
             self._unsub_adv()
+        if self._grace:
+            self._grace.cancel()
         if self._task:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -308,6 +332,11 @@ class MamarooDevice:
         self._failed.pop(device.address, None)
         self._address = device.address
         self._session = session
+        self._lost_at = None
+        if self._grace:
+            self._grace.cancel()
+            self._grace = None
+        self._ready.set()
         _LOGGER.debug("connected to %s", device.address)
         self._notify_listeners()
 
@@ -348,12 +377,24 @@ class MamarooDevice:
             attempt = 0
             await self._lost.wait()
             self._session = None
+            self._ready.clear()
+            self._lost_at = monotonic_time_coarse()
             _LOGGER.debug("disconnected")
-            self._notify_listeners()
+            # Entities stay available through the grace period; re-check after.
+            self._grace = self._hass.loop.call_later(
+                GRACE_SECONDS + 1, self._notify_listeners
+            )
 
     async def send(self, data: bytes) -> None:
-        """Send a command; the swing's next status report updates state."""
+        """Send a command, waiting briefly if the link is being re-established.
+
+        The swing confirms with a 0x41 packet, which updates state.
+        """
         async with self._lock:
-            if not self.available or self._session is None:
-                raise MamarooError("swing is not connected")
+            if not self.connected:
+                try:
+                    await asyncio.wait_for(self._ready.wait(), SEND_WAIT_SECONDS)
+                except TimeoutError as err:
+                    raise MamarooError("swing is not connected") from err
+            assert self._session is not None
             await self._session.write(data)

@@ -6,8 +6,8 @@ over Bluetooth Low Energy, through any Home Assistant Bluetooth adapter or proxy
 supports active connections. It uses no cloud and no account.
 
 > **Status: early.** The protocol was decoded from the UPPAbaby Connect Android app
-> (v1.0.2) and has not yet been verified against every swing setting. The motion names
-> follow the order on the swing's panel, which is an assumption until confirmed.
+> (v1.0.2) and checked against a real swing for pairing, motion, speed, sound and
+> volume. The shutdown timer and presets are not exposed yet.
 
 > **Safety.** The swing is not designed for sleep or unsupervised use (see the UPPAbaby
 > manual). Only start motion remotely when someone is with the baby.
@@ -45,9 +45,15 @@ app's pairing, so the UPPAbaby Connect app may need to be paired again.
 | Fan (the swing) | Motion on/off, speed 1–5 as a percentage, motion pattern (Cruise, Bounce, Sway, Rock, Wave) as a preset |
 | Power switch | Turns the swing on or off |
 | Sound switch | Turns the built-in sound on or off |
+| Sound track select | Sound 1–4, as numbered on the panel |
+| Volume number | 1–4, like the panel's volume lights |
 | Panel lock switch | Locks the touch panel |
 
-State updates are pushed by the swing. Nothing is polled.
+The swing pushes its state about once a second. Nothing is polled.
+
+The swing ends every Bluetooth connection after about 30 seconds, and the integration
+reconnects in 2–3 seconds. Entities keep their state through that gap, and a command
+sent during it waits for the reconnect.
 
 ## Raw commands
 
@@ -71,14 +77,15 @@ opcode they answer.
 | `43 01 <0/1>` | Power |
 | `43 02 <0/1>` | Motion on/off |
 | `43 03 <0/1>` | Sound on/off |
-| `43 04 <n>` | Motion pattern |
-| `43 05 <n>` | Sound track |
-| `43 06 <n>` | Speed |
-| `43 07 <n>` | Volume |
+| `43 04 <n>` | Motion pattern, 1–5 = the panel's icons left to right |
+| `43 05 <n>` | Sound track, 1–4 |
+| `43 06 <n>` | Speed, 1–5 |
+| `43 07 <n>` | Volume, 1–4 |
 | `43 0A <u16>` | Shutdown timer |
 | `43 0B <0/1>` | Panel lock |
 | `DB <n>` | Start preset *n* |
-| `53 …` | State report from the swing: motion, speed, sound, volume, power, motion on, sound on, timer, timer active, preset, panel lock |
+| `41 …` | The swing's acknowledgement of a `43` write, in the same layout as `53` |
+| `53 …` | State report, about once a second: motion, speed, sound, volume, power, motion on, sound on, timer (seconds left, big-endian u16 at bytes 10–11), timer active, preset, panel lock |
 
 ## Disclaimer
 

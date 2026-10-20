@@ -65,3 +65,10 @@ async def test_failed_addresses_are_avoided(hass: HomeAssistant) -> None:
     assert _pick(hass, infos, avoid=["AA:00:00:00:00:01"]) == "AA:00:00:00:00:02"
     # With everything avoided, still try the loudest rather than nothing.
     assert _pick(hass, infos, avoid=["AA:00:00:00:00:01", "AA:00:00:00:00:02"]) == "AA:00:00:00:00:01"
+
+
+async def test_preferred_address_survives_a_quiet_spell(hass: HomeAssistant) -> None:
+    # Connected identities stop advertising, so the one that worked goes quiet.
+    infos = [_info("AA:00:00:00:00:01", -50, age=200), _info("AA:00:00:00:00:02", -75, age=1)]
+    assert _pick(hass, infos, prefer="AA:00:00:00:00:01") == "AA:00:00:00:00:01"
+    assert _pick(hass, infos) == "AA:00:00:00:00:02"

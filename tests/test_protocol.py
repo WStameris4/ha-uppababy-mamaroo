@@ -54,7 +54,7 @@ def test_parse_status() -> None:
         motion_enabled=True,
         sound_enabled=False,
         timer_active=True,
-        timer_minutes=30,
+        timer_seconds=30,
         preset=2,
         panel_locked=True,
     )
@@ -63,3 +63,14 @@ def test_parse_status() -> None:
 def test_parse_status_rejects_other_packets() -> None:
     with pytest.raises(ValueError):
         protocol.parse_status(bytes.fromhex("b30100"))
+
+
+def test_parse_captured_packets() -> None:
+    # Wave at speed 5, sound 4 at volume 4, all on, 4 h timer counting down.
+    moving = protocol.parse_status(bytes.fromhex("53050504040101010000380e0003000000000000"))
+    assert (moving.motion, moving.speed, moving.sound, moving.volume) == (5, 5, 4, 4)
+    assert moving.power and moving.motion_enabled and moving.sound_enabled
+    assert moving.timer_seconds == 0x380E
+    # The 0x41 acknowledgement of a write carries the same layout.
+    ack = protocol.parse_status(bytes.fromhex("41010100000101010000383d0003000000000000"))
+    assert ack.sound_enabled and ack.motion == 1 and ack.speed == 1

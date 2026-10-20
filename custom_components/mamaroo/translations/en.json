@@ -35,6 +35,20 @@
       "power": { "name": "Power" },
       "sound": { "name": "Sound" },
       "panel_lock": { "name": "Panel lock" }
+    },
+    "select": {
+      "sound_track": {
+        "name": "Sound track",
+        "state": {
+          "sound_1": "Sound 1",
+          "sound_2": "Sound 2",
+          "sound_3": "Sound 3",
+          "sound_4": "Sound 4"
+        }
+      }
+    },
+    "number": {
+      "volume": { "name": "Volume" }
     }
   },
   "services": {
