@@ -28,11 +28,17 @@ REPLY_TIMEOUT = 3.0
 WRITE_TIMEOUT = 5.0
 PAIRING_TIMEOUT = 30.0
 AVOID_SECONDS = 300
+# Failures before a never-working address is skipped; the first connect to a
+# freshly rotated address sometimes fails once with a GATT error.
+AVOID_AFTER = 2
+# Failures before the last working address stops being preferred; the swing
+# retires addresses on a timer, and a retired one stays in the history.
+PREFER_MISSES = 2
 # The swing ends every connection after about 30 s (HCI 0x13, remote user
 # terminated) and the reconnect takes 2-3 s, so ride through short gaps.
 GRACE_SECONDS = 15
 SEND_WAIT_SECONDS = 10
-RECONNECT_DELAYS = (2, 5, 10, 30, 60)
+RECONNECT_DELAYS = (2, 5, 10, 15, 30)
 
 
 class MamarooError(Exception):
@@ -225,7 +231,8 @@ class MamarooDevice:
         # Addresses that have completed a handshake. One swing advertises
         # several, and some never accept a connection; only those are avoided.
         self._good: set[str] = {address} if address else set()
-        self._failed: dict[str, float] = {}
+        self._failed: dict[str, tuple[int, float]] = {}
+        self._misses = 0
         self._session: MamarooSession | None = None
         self._task: asyncio.Task[None] | None = None
         self._lost = asyncio.Event()
@@ -314,14 +321,26 @@ class MamarooDevice:
 
     def _pick(self) -> BLEDevice | None:
         now = monotonic_time_coarse()
-        avoid = [a for a, when in self._failed.items() if now - when < AVOID_SECONDS]
-        return latest_swing(self._hass, self._address, avoid)
+        avoid = [
+            address
+            for address, (count, when) in self._failed.items()
+            if count >= AVOID_AFTER and now - when < AVOID_SECONDS
+        ]
+        prefer = self._address if self._misses < PREFER_MISSES else None
+        return latest_swing(self._hass, prefer, avoid)
 
     def _record_failure(self, address: str) -> None:
+        if address == self._address:
+            self._misses += 1
         # A one-off GATT error on an address that works is not a reason to
         # wander off to one that never has.
-        if address not in self._good:
-            self._failed[address] = monotonic_time_coarse()
+        if address in self._good:
+            return
+        now = monotonic_time_coarse()
+        count, when = self._failed.get(address, (0, now))
+        if now - when >= AVOID_SECONDS:
+            count = 0
+        self._failed[address] = (count + 1, now)
 
     async def _connect(self) -> None:
         device = self._pick()
@@ -347,6 +366,7 @@ class MamarooDevice:
         self._failed.pop(device.address, None)
         self._good.add(device.address)
         self._address = device.address
+        self._misses = 0
         self._session = session
         self._lost_at = None
         if self._grace:
