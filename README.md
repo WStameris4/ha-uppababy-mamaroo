@@ -67,7 +67,7 @@ opcode they answer.
 | `B0` | Read the swing's Bluetooth ID; reply `B0 <status> <16-byte id>` |
 | `B2 00` | Open a new pairing; the swing replies `B1 01` asking for a pairing ID |
 | `B1 01 <16-byte uuid>` | Register a pairing ID; result arrives as `B3 xx 00` |
-| `B2 01 <16-byte uuid>` | Handshake with a stored pairing ID after connecting; result `B3 xx 00` |
+| `B2 01 <16-byte uuid>` | Handshake with a stored pairing ID after connecting: send `B0` first and wait for the swing's `B2 01` prompt; result `B3 xx 00` |
 | `43 01 <0/1>` | Power |
 | `43 02 <0/1>` | Motion on/off |
 | `43 03 <0/1>` | Sound on/off |

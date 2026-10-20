@@ -10,7 +10,7 @@ import pytest
 
 from homeassistant.core import HomeAssistant
 
-from custom_components.mamaroo.device import MamarooError, async_pair
+from custom_components.mamaroo.device import MamarooDevice, MamarooError, async_pair
 
 BLUETOOTH_ID = UUID("04830803-c1c2-0483-0803-c1c204830803")
 PAD = bytes(18)
@@ -39,7 +39,7 @@ class FakeClient:
             self._notify(None, bytearray(b"\xb2\x01" + PAD))  # unprompted
         elif data == b"\xb2\x00":
             self._notify(None, bytearray(b"\xb1\x01" + PAD))
-        elif data[:2] == b"\xb1\x01":
+        elif data[:2] in (b"\xb1\x01", b"\xb2\x01"):
             self._notify(None, bytearray(self._handshake_result.ljust(20, b"\x00")))
 
     async def disconnect(self) -> None:
@@ -62,8 +62,9 @@ async def _pair(hass: HomeAssistant, client: FakeClient):
 
 async def test_pairing_follows_the_swing(hass: HomeAssistant) -> None:
     client = FakeClient()
-    bluetooth_id, pairing_id = await _pair(hass, client)
+    bluetooth_id, pairing_id, address = await _pair(hass, client)
     assert bluetooth_id == BLUETOOTH_ID
+    assert address == "7E:17:C2:25:47:0E"
     assert client.written == [
         b"\xb0",
         b"\xb2\x00",
@@ -75,3 +76,37 @@ async def test_pairing_follows_the_swing(hass: HomeAssistant) -> None:
 async def test_refused_pairing_raises(hass: HomeAssistant) -> None:
     with pytest.raises(MamarooError, match="refused"):
         await _pair(hass, FakeClient(handshake_result=bytes.fromhex("b30101")))
+
+
+async def _connect(hass: HomeAssistant, client: FakeClient) -> MamarooDevice:
+    device = MamarooDevice(hass, PAIRING_ID)
+    with (
+        patch(
+            "custom_components.mamaroo.device.latest_swing",
+            return_value=SimpleNamespace(address="7E:17:C2:25:47:0E", name="mamaRoo5"),
+        ),
+        patch(
+            "custom_components.mamaroo.device.establish_connection",
+            AsyncMock(return_value=client),
+        ),
+    ):
+        await device._connect()
+    return device
+
+
+PAIRING_ID = UUID("762ac690-8736-4067-b1c8-9aad0c05b375")
+
+
+async def test_reconnect_asks_for_the_prompt_first(hass: HomeAssistant) -> None:
+    client = FakeClient()
+    device = await _connect(hass, client)
+    # As the app does: b0 first, wait for the swing's b2 prompt, then prove the ID.
+    assert client.written == [b"\xb0", b"\xb2\x01" + PAIRING_ID.bytes]
+    assert device.available
+
+
+async def test_reconnect_refused(hass: HomeAssistant) -> None:
+    client = FakeClient(handshake_result=bytes.fromhex("b30101"))
+    with pytest.raises(MamarooError, match="refused"):
+        await _connect(hass, client)
+    assert not client.is_connected

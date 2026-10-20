@@ -15,6 +15,7 @@ NOW = 1000.0
 
 def _info(address: str, rssi: int, age: float, uuids: list[str] | None = None):
     return SimpleNamespace(
+        address=address,
         device=SimpleNamespace(address=address),
         rssi=rssi,
         time=NOW - age,
@@ -22,7 +23,7 @@ def _info(address: str, rssi: int, age: float, uuids: list[str] | None = None):
     )
 
 
-def _pick(hass: HomeAssistant, infos: list) -> str | None:
+def _pick(hass: HomeAssistant, infos: list, **kwargs) -> str | None:
     with (
         patch(
             "custom_components.mamaroo.device.bluetooth.async_discovered_service_info",
@@ -30,12 +31,12 @@ def _pick(hass: HomeAssistant, infos: list) -> str | None:
         ),
         patch("custom_components.mamaroo.device.monotonic_time_coarse", return_value=NOW),
     ):
-        device = latest_swing(hass)
+        device = latest_swing(hass, **kwargs)
     return device.address if device else None
 
 
 async def test_strongest_fresh_swing_wins(hass: HomeAssistant) -> None:
-    # A neighbouring swing heard more recently, but faintly, must not win.
+    # A faint identity heard more recently must not win.
     infos = [_info("AA:00:00:00:00:01", -47, age=5), _info("AA:00:00:00:00:02", -75, age=1)]
     assert _pick(hass, infos) == "AA:00:00:00:00:01"
 
@@ -51,3 +52,16 @@ async def test_stale_and_foreign_devices_are_ignored(hass: HomeAssistant) -> Non
 
 async def test_nothing_in_range(hass: HomeAssistant) -> None:
     assert _pick(hass, [_info("AA:00:00:00:00:01", -40, age=300)]) is None
+
+
+async def test_last_working_address_wins_while_advertising(hass: HomeAssistant) -> None:
+    infos = [_info("AA:00:00:00:00:01", -47, age=5), _info("AA:00:00:00:00:02", -75, age=1)]
+    assert _pick(hass, infos, prefer="AA:00:00:00:00:02") == "AA:00:00:00:00:02"
+    assert _pick(hass, infos, prefer="AA:00:00:00:00:09") == "AA:00:00:00:00:01"
+
+
+async def test_failed_addresses_are_avoided(hass: HomeAssistant) -> None:
+    infos = [_info("AA:00:00:00:00:01", -47, age=5), _info("AA:00:00:00:00:02", -75, age=1)]
+    assert _pick(hass, infos, avoid=["AA:00:00:00:00:01"]) == "AA:00:00:00:00:02"
+    # With everything avoided, still try the loudest rather than nothing.
+    assert _pick(hass, infos, avoid=["AA:00:00:00:00:01", "AA:00:00:00:00:02"]) == "AA:00:00:00:00:01"

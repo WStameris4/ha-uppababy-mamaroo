@@ -9,7 +9,12 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.mamaroo.const import CONF_BLUETOOTH_ID, CONF_PAIRING_ID, DOMAIN
+from custom_components.mamaroo.const import (
+    CONF_ADDRESS,
+    CONF_BLUETOOTH_ID,
+    CONF_PAIRING_ID,
+    DOMAIN,
+)
 from custom_components.mamaroo.device import MamarooError
 
 BLUETOOTH_ID = UUID("0a0b0c0d-0000-1111-2222-333344445555")
@@ -26,7 +31,7 @@ async def test_pair_creates_entry(hass: HomeAssistant) -> None:
     with (
         patch(
             "custom_components.mamaroo.config_flow.async_pair",
-            return_value=(BLUETOOTH_ID, PAIRING_ID),
+            return_value=(BLUETOOTH_ID, PAIRING_ID, "7E:17:C2:25:47:0E"),
         ),
         patch("custom_components.mamaroo.async_setup_entry", return_value=True),
     ):
@@ -35,6 +40,7 @@ async def test_pair_creates_entry(hass: HomeAssistant) -> None:
     assert result["data"] == {
         CONF_PAIRING_ID: str(PAIRING_ID),
         CONF_BLUETOOTH_ID: str(BLUETOOTH_ID),
+        CONF_ADDRESS: "7E:17:C2:25:47:0E",
     }
     assert result["result"].unique_id == str(BLUETOOTH_ID)
 

@@ -10,7 +10,7 @@ from bleak.exc import BleakError
 from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 
-from .const import CONF_BLUETOOTH_ID, CONF_PAIRING_ID, DOMAIN
+from .const import CONF_ADDRESS, CONF_BLUETOOTH_ID, CONF_PAIRING_ID, DOMAIN
 from .device import MamarooError, async_pair, latest_swing
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class MamarooConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                bluetooth_id, pairing_id = await async_pair(self.hass)
+                bluetooth_id, pairing_id, address = await async_pair(self.hass)
             except (BleakError, MamarooError, TimeoutError) as err:
                 _LOGGER.warning("Pairing failed: %s", err)
                 errors["base"] = "pairing_failed"
@@ -62,6 +62,7 @@ class MamarooConfigFlow(ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_PAIRING_ID: str(pairing_id),
                         CONF_BLUETOOTH_ID: str(bluetooth_id) if bluetooth_id else None,
+                        CONF_ADDRESS: address,
                     },
                 )
         return self.async_show_form(step_id="pair", errors=errors)

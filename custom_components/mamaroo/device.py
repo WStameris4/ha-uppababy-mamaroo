@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 import contextlib
 import logging
 from uuid import UUID, uuid4
@@ -24,7 +24,9 @@ _LOGGER = logging.getLogger(__name__)
 
 FRESH_SECONDS = 60
 REPLY_TIMEOUT = 3.0
+WRITE_TIMEOUT = 5.0
 PAIRING_TIMEOUT = 30.0
+AVOID_SECONDS = 300
 RECONNECT_DELAYS = (2, 5, 10, 30, 60)
 
 
@@ -32,12 +34,18 @@ class MamarooError(Exception):
     """Talking to the swing failed."""
 
 
-def latest_swing(hass: HomeAssistant) -> BLEDevice | None:
-    """Return the swing heard loudest in the last minute.
+def latest_swing(
+    hass: HomeAssistant,
+    prefer: str | None = None,
+    avoid: Collection[str] = (),
+) -> BLEDevice | None:
+    """Return the address to connect to, from those heard in the last minute.
 
-    The swing advertises from rotating random addresses, so it is found by its
-    service UUID rather than by a stored MAC. Picking by signal rather than by
-    recency keeps a neighbouring swing at the edge of range from winning.
+    One swing advertises under several addresses at once (one of them changes
+    at every power-up), and not all of them accept connections, so it is found
+    by its service UUID rather than a stored MAC. The address that last worked
+    wins while it is still advertising; otherwise the loudest one not recently
+    failed, falling back to the loudest of all.
     """
     now = monotonic_time_coarse()
     infos = [
@@ -47,7 +55,11 @@ def latest_swing(hass: HomeAssistant) -> BLEDevice | None:
     ]
     if not infos:
         return None
-    return max(infos, key=lambda info: info.rssi).device
+    for info in infos:
+        if info.address == prefer:
+            return info.device
+    usable = [info for info in infos if info.address not in avoid] or infos
+    return max(usable, key=lambda info: info.rssi).device
 
 
 class MamarooSession:
@@ -66,6 +78,7 @@ class MamarooSession:
             raise MamarooError("swing characteristic not found")
         self._char = char
         self._with_response = "write" in char.properties
+        _LOGGER.debug("characteristic properties %s", char.properties)
 
     @classmethod
     async def open(
@@ -125,9 +138,13 @@ class MamarooSession:
     async def write(self, data: bytes) -> None:
         """Write one command."""
         _LOGGER.debug("write %s", data.hex())
-        await self._client.write_gatt_char(
-            self._char, data, response=self._with_response
-        )
+        try:
+            async with asyncio.timeout(WRITE_TIMEOUT):
+                await self._client.write_gatt_char(
+                    self._char, data, response=self._with_response
+                )
+        except TimeoutError as err:
+            raise MamarooError(f"write of {data.hex()} timed out") from err
 
     async def request(
         self, data: bytes, reply: int | None = None, timeout: float = REPLY_TIMEOUT
@@ -146,7 +163,7 @@ class MamarooSession:
             await self._client.disconnect()
 
 
-async def async_pair(hass: HomeAssistant) -> tuple[UUID | None, UUID]:
+async def async_pair(hass: HomeAssistant) -> tuple[UUID | None, UUID, str]:
     """Register a new pairing ID; the swing must be in pairing mode.
 
     Observed exchange (2026-10-20):
@@ -182,7 +199,7 @@ async def async_pair(hass: HomeAssistant) -> tuple[UUID | None, UUID]:
         _LOGGER.debug("handshake result %s", outcome.hex())
         if not protocol.handshake_ok(outcome):
             raise MamarooError(f"pairing refused: {outcome.hex()}")
-        return reply.bluetooth_id, pairing_id
+        return reply.bluetooth_id, pairing_id, device.address
     finally:
         await session.close()
 
@@ -190,9 +207,13 @@ async def async_pair(hass: HomeAssistant) -> tuple[UUID | None, UUID]:
 class MamarooDevice:
     """Keeps a handshaken connection to the swing and tracks its state."""
 
-    def __init__(self, hass: HomeAssistant, pairing_id: UUID) -> None:
+    def __init__(
+        self, hass: HomeAssistant, pairing_id: UUID, address: str | None = None
+    ) -> None:
         self._hass = hass
         self._pairing_id = pairing_id
+        self._address = address
+        self._failed: dict[str, float] = {}
         self._session: MamarooSession | None = None
         self._task: asyncio.Task[None] | None = None
         self._lost = asyncio.Event()
@@ -256,30 +277,58 @@ class MamarooDevice:
             await self._session.close()
             self._session = None
 
+    def _pick(self) -> BLEDevice | None:
+        now = monotonic_time_coarse()
+        avoid = [a for a, when in self._failed.items() if now - when < AVOID_SECONDS]
+        return latest_swing(self._hass, self._address, avoid)
+
     async def _connect(self) -> None:
-        device = latest_swing(self._hass)
+        device = self._pick()
         if device is None:
             raise MamarooError("no swing in range")
         self._lost.clear()
-        session = await MamarooSession.open(
-            device,
-            lambda: latest_swing(self._hass),
-            self._disconnected,
-            self._status,
-        )
         try:
-            result = await session.request(
-                protocol.handshake(self._pairing_id), protocol.OP_HANDSHAKE_RESULT
+            session = await MamarooSession.open(
+                device, self._pick, self._disconnected, self._status, max_attempts=2
             )
-        except BaseException:
+        except BleakError:
+            self._failed[device.address] = monotonic_time_coarse()
+            if self._address == device.address:
+                self._address = None
+            raise
+        try:
+            await self._handshake(session)
+        except asyncio.CancelledError:
             await session.close()
             raise
-        if not protocol.handshake_ok(result):
+        except BaseException:
+            self._failed[device.address] = monotonic_time_coarse()
             await session.close()
-            raise MamarooError(f"handshake refused: {result.hex()}; re-pair the swing")
+            raise
+        self._failed.pop(device.address, None)
+        self._address = device.address
         self._session = session
         _LOGGER.debug("connected to %s", device.address)
         self._notify_listeners()
+
+    async def _handshake(self, session: MamarooSession) -> None:
+        """Prove the pairing, the way the app does after every connect.
+
+            -> b0               <- b0 00 <bluetooth id>
+                                <- b2 01 ...   (the swing's prompt)
+            -> b2 01 <id>       <- b3 xx 00    (accepted)
+        """
+        prompt = session.expect(protocol.OP_HANDSHAKE)
+        await session.request(protocol.get_bluetooth_id())
+        try:
+            await asyncio.wait_for(prompt, REPLY_TIMEOUT)
+        except TimeoutError as err:
+            raise MamarooError("swing sent no handshake prompt") from err
+        result = await session.request(
+            protocol.handshake(self._pairing_id), protocol.OP_HANDSHAKE_RESULT
+        )
+        if not protocol.handshake_ok(result):
+            raise MamarooError(f"handshake refused: {result.hex()}; re-pair the swing")
 
     async def _run(self) -> None:
         attempt = 0

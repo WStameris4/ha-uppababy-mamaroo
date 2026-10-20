@@ -13,7 +13,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-from .const import CONF_PAIRING_ID, DOMAIN, SERVICE_SEND_COMMAND
+from .const import CONF_ADDRESS, CONF_PAIRING_ID, DOMAIN, SERVICE_SEND_COMMAND
 from .device import MamarooDevice, MamarooError
 
 PLATFORMS = [Platform.FAN, Platform.SWITCH]
@@ -48,7 +48,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: MamarooConfigEntry) -> bool:
     """Set up the swing from a config entry."""
-    device = MamarooDevice(hass, UUID(entry.data[CONF_PAIRING_ID]))
+    device = MamarooDevice(
+        hass, UUID(entry.data[CONF_PAIRING_ID]), entry.data.get(CONF_ADDRESS)
+    )
     entry.runtime_data = device
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     device.start()
