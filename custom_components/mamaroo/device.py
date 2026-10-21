@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Mapping
 import contextlib
 import logging
 from uuid import UUID, uuid4
@@ -27,10 +27,8 @@ PREFER_SECONDS = 900
 REPLY_TIMEOUT = 3.0
 WRITE_TIMEOUT = 5.0
 PAIRING_TIMEOUT = 30.0
-AVOID_SECONDS = 300
-# Failures before a never-working address is skipped; the first connect to a
-# freshly rotated address sometimes fails once with a GATT error.
-AVOID_AFTER = 2
+# How long a failed connect counts against an address.
+FAILURE_SECONDS = 300
 # Failures before the last working address stops being preferred; the swing
 # retires addresses on a timer, and a retired one stays in the history.
 PREFER_MISSES = 2
@@ -57,16 +55,17 @@ class MamarooError(Exception):
 def latest_swing(
     hass: HomeAssistant,
     prefer: str | None = None,
-    avoid: Collection[str] = (),
+    failures: Mapping[str, int] | None = None,
 ) -> BLEDevice | None:
     """Return the address to connect to.
 
     One swing advertises under several addresses at once (one of them changes
     at power-up and on a timer), and not all of them accept connections, so it
     is found by its service UUID rather than a stored MAC. The address that
-    last worked wins if heard in the last 15 minutes; otherwise the loudest one
-    heard in the last minute and not recently failed, falling back to the
-    loudest of all.
+    last worked wins if heard in the last 15 minutes; otherwise, of those heard
+    in the last minute, the one with the fewest recent failures, then the
+    loudest. Ranking rather than excluding means an address that refuses for a
+    while is retried, never shut out in favour of one that never works.
     """
     now = monotonic_time_coarse()
     swings = [
@@ -82,8 +81,8 @@ def latest_swing(
     infos = [info for info in swings if now - info.time < FRESH_SECONDS]
     if not infos:
         return None
-    usable = [info for info in infos if info.address not in avoid] or infos
-    return max(usable, key=lambda info: info.rssi).device
+    failures = failures or {}
+    return min(infos, key=lambda info: (failures.get(info.address, 0), -info.rssi)).device
 
 
 class MamarooSession:
@@ -260,8 +259,9 @@ class MamarooDevice:
         self._pairing_id = pairing_id
         self._address = address
         # Addresses that have completed a handshake. One swing advertises
-        # several, and some never accept a connection; only those are avoided.
+        # several, and some never accept a connection; only those are ranked down.
         self._good: set[str] = {address} if address else set()
+        # Recent connect failures of addresses that never worked: count, last.
         self._failed: dict[str, tuple[int, float]] = {}
         self._misses = 0
         self._session: MamarooSession | None = None
@@ -352,13 +352,13 @@ class MamarooDevice:
 
     def _pick(self) -> BLEDevice | None:
         now = monotonic_time_coarse()
-        avoid = [
-            address
+        failures = {
+            address: count
             for address, (count, when) in self._failed.items()
-            if count >= AVOID_AFTER and now - when < AVOID_SECONDS
-        ]
+            if now - when < FAILURE_SECONDS
+        }
         prefer = self._address if self._misses < PREFER_MISSES else None
-        return latest_swing(self._hass, prefer, avoid)
+        return latest_swing(self._hass, prefer, failures)
 
     def _record_failure(self, address: str) -> None:
         if address == self._address:
@@ -369,7 +369,7 @@ class MamarooDevice:
             return
         now = monotonic_time_coarse()
         count, when = self._failed.get(address, (0, now))
-        if now - when >= AVOID_SECONDS:
+        if now - when >= FAILURE_SECONDS:
             count = 0
         self._failed[address] = (count + 1, now)
 

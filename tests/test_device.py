@@ -75,11 +75,12 @@ async def test_last_working_address_wins_while_advertising(hass: HomeAssistant) 
     assert _pick(hass, infos, prefer="AA:00:00:00:00:09") == "AA:00:00:00:00:01"
 
 
-async def test_failed_addresses_are_avoided(hass: HomeAssistant) -> None:
+async def test_fewest_failures_wins_then_loudest(hass: HomeAssistant) -> None:
     infos = [_info("AA:00:00:00:00:01", -47, age=5), _info("AA:00:00:00:00:02", -75, age=1)]
-    assert _pick(hass, infos, avoid=["AA:00:00:00:00:01"]) == "AA:00:00:00:00:02"
-    # With everything avoided, still try the loudest rather than nothing.
-    assert _pick(hass, infos, avoid=["AA:00:00:00:00:01", "AA:00:00:00:00:02"]) == "AA:00:00:00:00:01"
+    assert _pick(hass, infos, failures={"AA:00:00:00:00:01": 1}) == "AA:00:00:00:00:02"
+    # Equal failures: back to the loudest, so neither is ever shut out.
+    both = {"AA:00:00:00:00:01": 1, "AA:00:00:00:00:02": 1}
+    assert _pick(hass, infos, failures=both) == "AA:00:00:00:00:01"
 
 
 async def test_preferred_address_survives_a_quiet_spell(hass: HomeAssistant) -> None:
@@ -97,8 +98,13 @@ async def test_retired_address_is_dropped_after_misses(hass: HomeAssistant) -> N
     assert _device_pick(device, infos, ["AA:00:00:00:00:01"]) == "AA:00:00:00:00:02"
 
 
-async def test_new_address_survives_one_failure(hass: HomeAssistant) -> None:
-    infos = [_info("AA:00:00:00:00:01", -50, age=1), _info("AA:00:00:00:00:02", -75, age=1)]
+async def test_a_dead_address_never_takes_over(hass: HomeAssistant) -> None:
+    # 01 is the swing's real address, refusing for a while; 02 never works.
+    infos = [_info("AA:00:00:00:00:01", -63, age=1), _info("AA:00:00:00:00:02", -83, age=1)]
     device = MamarooDevice(hass, uuid4())
-    assert _device_pick(device, infos, ["AA:00:00:00:00:01"]) == "AA:00:00:00:00:01"
-    assert _device_pick(device, infos, ["AA:00:00:00:00:01"]) == "AA:00:00:00:00:02"
+    picks = []
+    for _ in range(6):
+        picked = _device_pick(device, infos, [])
+        picks.append(picked)
+        _device_pick(device, infos, [picked])
+    assert picks.count("AA:00:00:00:00:01") == 3
