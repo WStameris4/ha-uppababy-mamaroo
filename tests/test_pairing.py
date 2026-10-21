@@ -16,13 +16,46 @@ BLUETOOTH_ID = UUID("04830803-c1c2-0483-0803-c1c204830803")
 PAD = bytes(18)
 
 
+DIS = {
+    "00002a26-0000-1000-8000-00805f9b34fb": b"1.2.3\x00",
+    "00002a27-0000-1000-8000-00805f9b34fb": b"B",
+}
+
+
+class FakeServices:
+    """The swing's GATT table: its control service plus Device Information."""
+
+    def __init__(self) -> None:
+        self._services = [
+            SimpleNamespace(
+                uuid="622d0100-2416-0fa7-e132-2f1495cc2ce0",
+                characteristics=[
+                    SimpleNamespace(
+                        uuid="622d0101-2416-0fa7-e132-2f1495cc2ce0",
+                        properties=["read", "write", "notify"],
+                    )
+                ],
+            ),
+            SimpleNamespace(
+                uuid="0000180a-0000-1000-8000-00805f9b34fb",
+                characteristics=[
+                    SimpleNamespace(uuid=uuid, properties=["read"]) for uuid in DIS
+                ],
+            ),
+        ]
+
+    def __iter__(self):
+        return iter(self._services)
+
+    def get_characteristic(self, _uuid):
+        return SimpleNamespace(properties=["write", "notify"])
+
+
 class FakeClient:
     """A BleakClient that answers writes the way the swing did."""
 
     def __init__(self, handshake_result: bytes = bytes.fromhex("b30100")) -> None:
-        self.services = SimpleNamespace(
-            get_characteristic=lambda _uuid: SimpleNamespace(properties=["write", "notify"])
-        )
+        self.services = FakeServices()
         self.is_connected = True
         self.written: list[bytes] = []
         self._handshake_result = handshake_result
@@ -41,6 +74,9 @@ class FakeClient:
             self._notify(None, bytearray(b"\xb1\x01" + PAD))
         elif data[:2] in (b"\xb1\x01", b"\xb2\x01"):
             self._notify(None, bytearray(self._handshake_result.ljust(20, b"\x00")))
+
+    async def read_gatt_char(self, char) -> bytearray:
+        return bytearray(DIS[char.uuid])
 
     async def disconnect(self) -> None:
         self.is_connected = False
@@ -117,3 +153,13 @@ async def test_a_working_address_is_never_avoided(hass: HomeAssistant) -> None:
     device._record_failure("7E:17:C2:25:47:0E")
     device._record_failure("42:2D:8F:6D:FB:52")
     assert list(device._failed) == ["42:2D:8F:6D:FB:52"]
+
+
+async def test_device_information_is_read_once(hass: HomeAssistant) -> None:
+    reported = []
+    device = await _connect(hass, FakeClient())
+    device._on_info = reported.append
+    await device._read_info()
+    await device._read_info()
+    assert device.info == {"firmware": "1.2.3", "hardware": "B"}
+    assert reported == [device.info]

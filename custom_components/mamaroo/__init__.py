@@ -8,9 +8,9 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
 from .const import CONF_ADDRESS, CONF_PAIRING_ID, DOMAIN, SERVICE_SEND_COMMAND
@@ -48,8 +48,27 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: MamarooConfigEntry) -> bool:
     """Set up the swing from a config entry."""
+
+    @callback
+    def update_device(info: dict[str, str]) -> None:
+        """Show what the swing reports about itself on its device page."""
+        registry = dr.async_get(hass)
+        identifiers = {(DOMAIN, entry.unique_id or entry.entry_id)}
+        if (device_entry := registry.async_get_device(identifiers=identifiers)) is None:
+            return
+        registry.async_update_device(
+            device_entry.id,
+            sw_version=info.get("firmware") or info.get("software"),
+            hw_version=info.get("hardware"),
+            serial_number=info.get("serial_number"),
+            model_id=info.get("model"),
+        )
+
     device = MamarooDevice(
-        hass, UUID(entry.data[CONF_PAIRING_ID]), entry.data.get(CONF_ADDRESS)
+        hass,
+        UUID(entry.data[CONF_PAIRING_ID]),
+        entry.data.get(CONF_ADDRESS),
+        update_device,
     )
     entry.runtime_data = device
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

@@ -54,6 +54,9 @@ app's pairing, so the UPPAbaby Connect app may need to be paired again.
 
 The swing pushes its state about once a second. Nothing is polled.
 
+The device page shows the firmware and hardware revision the swing reports over Bluetooth
+(the Device Information service), read once after Home Assistant starts.
+
 The swing ends every Bluetooth connection after about 30 seconds, and the integration
 reconnects in 2–3 seconds. Entities keep their state through that gap, and a command
 sent during it waits for the reconnect.

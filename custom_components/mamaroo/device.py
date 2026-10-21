@@ -39,6 +39,15 @@ PREFER_MISSES = 2
 GRACE_SECONDS = 15
 SEND_WAIT_SECONDS = 10
 RECONNECT_DELAYS = (2, 5, 10, 15, 30)
+# Device Information service strings, read once per run.
+DEVICE_INFO = {
+    "00002a29-0000-1000-8000-00805f9b34fb": "manufacturer",
+    "00002a24-0000-1000-8000-00805f9b34fb": "model",
+    "00002a25-0000-1000-8000-00805f9b34fb": "serial_number",
+    "00002a27-0000-1000-8000-00805f9b34fb": "hardware",
+    "00002a26-0000-1000-8000-00805f9b34fb": "firmware",
+    "00002a28-0000-1000-8000-00805f9b34fb": "software",
+}
 
 
 class MamarooError(Exception):
@@ -172,6 +181,22 @@ class MamarooSession:
         except TimeoutError as err:
             raise MamarooError(f"no reply to {data.hex()}") from err
 
+    async def read_info(self) -> dict[str, str]:
+        """Log the GATT table and read the Device Information strings."""
+        info: dict[str, str] = {}
+        for service in self._client.services:
+            _LOGGER.debug("service %s", service.uuid)
+            for char in service.characteristics:
+                _LOGGER.debug("characteristic %s %s", char.uuid, char.properties)
+                key = DEVICE_INFO.get(char.uuid)
+                if key is None or "read" not in char.properties:
+                    continue
+                async with asyncio.timeout(REPLY_TIMEOUT):
+                    raw = bytes(await self._client.read_gatt_char(char))
+                info[key] = raw.decode("utf-8", "replace").strip("\x00 ")
+                _LOGGER.debug("%s = %r (%s)", key, info[key], raw.hex())
+        return info
+
     async def close(self) -> None:
         """Disconnect."""
         with contextlib.suppress(BleakError):
@@ -223,9 +248,15 @@ class MamarooDevice:
     """Keeps a handshaken connection to the swing and tracks its state."""
 
     def __init__(
-        self, hass: HomeAssistant, pairing_id: UUID, address: str | None = None
+        self,
+        hass: HomeAssistant,
+        pairing_id: UUID,
+        address: str | None = None,
+        on_info: Callable[[dict[str, str]], None] | None = None,
     ) -> None:
         self._hass = hass
+        self._on_info = on_info
+        self.info: dict[str, str] | None = None
         self._pairing_id = pairing_id
         self._address = address
         # Addresses that have completed a handshake. One swing advertises
@@ -376,6 +407,18 @@ class MamarooDevice:
         _LOGGER.debug("connected to %s", device.address)
         self._notify_listeners()
 
+    async def _read_info(self) -> None:
+        """Read firmware, hardware and the like once; retry on a later link."""
+        if self.info is not None or self._session is None:
+            return
+        try:
+            self.info = await self._session.read_info()
+        except (BleakError, TimeoutError) as err:
+            _LOGGER.debug("device information read failed: %s", err)
+            return
+        if self._on_info:
+            self._on_info(self.info)
+
     async def _handshake(self, session: MamarooSession) -> None:
         """Prove the pairing, the way the app does after every connect.
 
@@ -411,6 +454,7 @@ class MamarooDevice:
                     await self._seen.wait()
                 continue
             attempt = 0
+            await self._read_info()
             await self._lost.wait()
             self._session = None
             self._ready.clear()
