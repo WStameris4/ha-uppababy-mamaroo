@@ -8,24 +8,12 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import (
-    HomeAssistant,
-    ServiceCall,
-    ServiceResponse,
-    SupportsResponse,
-    callback,
-)
+from homeassistant.core import HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.typing import ConfigType
 
-from .const import (
-    CONF_ADDRESS,
-    CONF_PAIRING_ID,
-    DOMAIN,
-    SERVICE_BOND,
-    SERVICE_SEND_COMMAND,
-)
+from .const import CONF_ADDRESS, CONF_PAIRING_ID, DOMAIN, SERVICE_SEND_COMMAND
 from .device import MamarooDevice, MamarooError
 
 PLATFORMS = [Platform.NUMBER, Platform.SELECT, Platform.SWITCH]
@@ -54,19 +42,6 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     hass.services.async_register(
         DOMAIN, SERVICE_SEND_COMMAND, send_command, schema=SEND_COMMAND_SCHEMA
-    )
-
-    async def bond(call: ServiceCall) -> ServiceResponse:
-        entries = hass.config_entries.async_loaded_entries(DOMAIN)
-        if not entries:
-            raise ServiceValidationError("no swing configured")
-        try:
-            return await entries[0].runtime_data.bond()
-        except MamarooError as err:
-            raise HomeAssistantError(str(err)) from err
-
-    hass.services.async_register(
-        DOMAIN, SERVICE_BOND, bond, supports_response=SupportsResponse.OPTIONAL
     )
     return True
 

@@ -76,12 +76,6 @@ class FakeClient:
         elif data[:2] in (b"\xb1\x01", b"\xb2\x01"):
             self._notify(None, bytearray(self._handshake_result.ljust(20, b"\x00")))
 
-    address = "7E:17:C2:25:47:0E"
-
-    async def pair(self) -> bool:
-        self.paired = True
-        return True
-
     async def read_gatt_char(self, char) -> bytearray:
         return bytearray(DIS[char.uuid])
 
@@ -170,12 +164,3 @@ async def test_device_information_is_read_once(hass: HomeAssistant) -> None:
     await device._read_info()
     assert device.info == {"firmware": "1.2.3", "hardware": "B"}
     assert reported == [device.info]
-
-
-async def test_bond_runs_over_the_live_link(hass: HomeAssistant) -> None:
-    client = FakeClient()
-    device = await _connect(hass, client)
-    result = await device.bond()
-    assert client.paired
-    assert result["paired"] is True
-    assert result["address"] == "7E:17:C2:25:47:0E"

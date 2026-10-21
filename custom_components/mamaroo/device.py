@@ -96,8 +96,6 @@ class MamarooSession:
         self._client = client
         self._on_status = on_status
         self._waiters: dict[int, asyncio.Future[bytes]] = {}
-        # The adapter or proxy that carries this link, when HA reports it.
-        self.source: str | None = None
         char = client.services.get_characteristic(CHAR_UUID)
         if char is None:
             raise MamarooError("swing characteristic not found")
@@ -125,9 +123,6 @@ class MamarooSession:
         )
         try:
             session = cls(client, on_status)
-            details = getattr(device, "details", None)
-            details = details if isinstance(details, dict) else {}
-            session.source = details.get("source")
             await client.start_notify(session._char, session._notified)
         except BaseException:
             await client.disconnect()
@@ -200,15 +195,6 @@ class MamarooSession:
                 if value:
                     info[key] = value
         return info
-
-    async def bond(self) -> dict[str, object]:
-        """Ask for a Bluetooth bond over this link (experimental).
-
-        The swing advertises resolvable private addresses; a bonded central
-        holds its identity key and so could follow it across rotations.
-        """
-        paired = await self._client.pair()
-        return {"paired": paired, "address": self._client.address, "via": self.source}
 
     async def close(self) -> None:
         """Disconnect."""
@@ -478,22 +464,6 @@ class MamarooDevice:
             self._grace = self._hass.loop.call_later(
                 GRACE_SECONDS + 1, self._notify_listeners
             )
-
-    async def bond(self) -> dict[str, object]:
-        """Bond with the swing over the next live link (experimental)."""
-        async with self._lock:
-            if not self.connected:
-                try:
-                    await asyncio.wait_for(self._ready.wait(), SEND_WAIT_SECONDS)
-                except TimeoutError as err:
-                    raise MamarooError("swing is not connected") from err
-            assert self._session is not None
-            try:
-                result = await self._session.bond()
-            except (BleakError, NotImplementedError) as err:
-                raise MamarooError(f"bonding failed: {err!r}") from err
-        _LOGGER.info("bond result %s", result)
-        return result
 
     async def send(self, data: bytes) -> None:
         """Send a command, waiting briefly if the link is being re-established.
