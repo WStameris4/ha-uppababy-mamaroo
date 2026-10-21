@@ -12,3 +12,4 @@ CONF_BLUETOOTH_ID = "bluetooth_id"
 CONF_ADDRESS = "address"
 
 SERVICE_SEND_COMMAND = "send_command"
+SERVICE_BOND = "bond"

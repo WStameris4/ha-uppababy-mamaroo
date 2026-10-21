@@ -56,6 +56,10 @@
       "fields": {
         "data": { "name": "Data", "description": "Command bytes as hex, e.g. 430101 (power on)." }
       }
+    },
+    "bond": {
+      "name": "Bond (experimental)",
+      "description": "Asks for a Bluetooth bond over the live connection, to test whether the swing's rotating address can be followed."
     }
   }
 }

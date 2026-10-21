@@ -5,3 +5,4 @@ send_command:
       example: "430101"
       selector:
         text:
+bond:
