@@ -193,8 +193,11 @@ class MamarooSession:
                     continue
                 async with asyncio.timeout(REPLY_TIMEOUT):
                     raw = bytes(await self._client.read_gatt_char(char))
-                info[key] = raw.decode("utf-8", "replace").strip("\x00 ")
-                _LOGGER.debug("%s = %r (%s)", key, info[key], raw.hex())
+                value = raw.decode("utf-8", "replace").strip("\x00 ")
+                _LOGGER.debug("%s = %r (%s)", key, value, raw.hex())
+                # The swing has a serial number characteristic but leaves it empty.
+                if value:
+                    info[key] = value
         return info
 
     async def close(self) -> None:
