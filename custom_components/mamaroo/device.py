@@ -182,19 +182,16 @@ class MamarooSession:
             raise MamarooError(f"no reply to {data.hex()}") from err
 
     async def read_info(self) -> dict[str, str]:
-        """Log the GATT table and read the Device Information strings."""
+        """Read the Device Information strings."""
         info: dict[str, str] = {}
         for service in self._client.services:
-            _LOGGER.debug("service %s", service.uuid)
             for char in service.characteristics:
-                _LOGGER.debug("characteristic %s %s", char.uuid, char.properties)
                 key = DEVICE_INFO.get(char.uuid)
                 if key is None or "read" not in char.properties:
                     continue
                 async with asyncio.timeout(REPLY_TIMEOUT):
                     raw = bytes(await self._client.read_gatt_char(char))
                 value = raw.decode("utf-8", "replace").strip("\x00 ")
-                _LOGGER.debug("%s = %r (%s)", key, value, raw.hex())
                 # The swing has a serial number characteristic but leaves it empty.
                 if value:
                     info[key] = value
