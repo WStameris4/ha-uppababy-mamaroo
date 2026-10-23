@@ -35,8 +35,26 @@ During setup:
 1. Turn the swing on and put it in pairing mode by holding the music button.
 2. Select **Submit** within 30 seconds.
 
-Home Assistant then registers its own pairing ID. The swing may then forget the phone
-app's pairing, so the UPPAbaby Connect app may need to be paired again.
+Home Assistant then registers its own pairing ID. The swing keeps several pairing IDs,
+so the UPPAbaby Connect app stays paired too.
+
+## Bonding the Bluetooth proxy
+
+Outside pairing mode, the swing asks every device that connects to bond with it (a
+Bluetooth security request). A device that doesn't bond is disconnected 30 seconds
+later. Phones bond when you accept the "Pair with mamaRoo5?" prompt.
+
+Bond each Bluetooth proxy or adapter that Home Assistant uses to reach the swing, once:
+
+- **Android-based proxies** (for example a tablet running a Bluetooth proxy app): accept
+  the "Pairing request: mamaRoo5" prompt or notification that appears while Home
+  Assistant is connected, or pair `mamaRoo5` under **Settings → Bluetooth → Pair new
+  device**.
+
+Once bonded, the link stays up. The bonded proxy also resolves the swing's rotating
+private address to one stable address. Without a bond the integration still works, but it
+reconnects every 30 seconds and can lose the swing for a minute or two when its address
+changes.
 
 ## Entities
 
@@ -57,9 +75,9 @@ The swing pushes its state about once a second. Nothing is polled.
 The device page shows the firmware and hardware revision the swing reports over Bluetooth
 (the Device Information service), read once after Home Assistant starts.
 
-The swing ends every Bluetooth connection after about 30 seconds, and the integration
-reconnects in 2–3 seconds. Entities keep their state through that gap, and a command
-sent during it waits for the reconnect.
+If a connection drops (for example through a proxy that isn't bonded, see above), the
+integration reconnects in 2–3 seconds. Entities keep their state through that gap, and a
+command sent during it waits for the reconnect.
 
 ## Raw commands
 
